@@ -37,8 +37,11 @@ const DEFAULT_LANG = {
 const DEFAULT_CMD = {
     ROOT: {
         CMD: "transfer",
-        description: "物品转移/Item transfer",
-        permission: PermType.Any
+        DESCRIPTION: "物品转移/Item transfer",
+        PERMISSION: PermType.Any,
+        FLAG:0x80,
+        ALIAS:"tf"
+
     },
     TRANSFER_ACTION: {
         NAME: "transfer_action",
@@ -47,6 +50,10 @@ const DEFAULT_CMD = {
     BASE_ACTION: {
         NAME: "base_action",
         VALUES: ["giveup"]
+    },
+    GUI_ACTION : {
+        NAME:"gui_action",
+        VALUES: ["gui"]
     },
     ROOT_ACTION: {
         NAME: "do",
@@ -135,18 +142,37 @@ class Utils {
     //注册指令
     static registerCommand() {
 
+        //闭包回调
         function cmdCallBack(cmd, origin, output, results) {
             if (!Utils.hasNull(cmd, origin, output, results)) {
+
                 Utils.debug("res:" + JSON.stringify(results));
                 Utils.debug("cmd:" + JSON.stringify(cmd));
+
+                switch (results[DEFAULT_CMD.ROOT_ACTION.NAME]){
+                    //p2b
+                    case DEFAULT_CMD.TRANSFER_ACTION.VALUES[0] : {
+
+                    }break;
+                    //b2b
+                    case DEFAULT_CMD.TRANSFER_ACTION.VALUES[1] : {
+
+                    }break;
+                    //giveup
+                    case DEFAULT_CMD.BASE_ACTION.VALUES[0] : {
+
+                    }break;
+                }
             }
         }
 
         //顶层命令注册
         let cmd = mc.newCommand(
             DEFAULT_CMD.ROOT.CMD,
-            DEFAULT_CMD.ROOT.description,
-            DEFAULT_CMD.ROOT.permission);
+            DEFAULT_CMD.ROOT.DESCRIPTION,
+            DEFAULT_CMD.ROOT.PERMISSION,
+            DEFAULT_CMD.ROOT.FLAG,
+            DEFAULT_CMD.ROOT.ALIAS);
 
         //枚举设置
         cmd.setEnum(
@@ -156,6 +182,10 @@ class Utils {
         cmd.setEnum(
             DEFAULT_CMD.BASE_ACTION.NAME,
             DEFAULT_CMD.BASE_ACTION.VALUES);
+
+        cmd.setEnum(
+            DEFAULT_CMD.GUI_ACTION.NAME,
+            DEFAULT_CMD.GUI_ACTION.VALUES);
 
         //参数注册
         cmd.mandatory(
@@ -170,10 +200,18 @@ class Utils {
             DEFAULT_CMD.BASE_ACTION.NAME,
             DEFAULT_CMD.ROOT_ACTION.EnumOption);
 
+        cmd.mandatory(
+            DEFAULT_CMD.ROOT_ACTION.NAME,
+            DEFAULT_CMD.ROOT_ACTION.TYPE,
+            DEFAULT_CMD.GUI_ACTION.NAME,
+            DEFAULT_CMD.ROOT_ACTION.EnumOption);
+
         //参数重载
         cmd.overload([DEFAULT_CMD.TRANSFER_ACTION.NAME]);
 
         cmd.overload([DEFAULT_CMD.BASE_ACTION.NAME]);
+
+        cmd.overload([DEFAULT_CMD.GUI_ACTION.NAME]);
 
         //回调设置
         cmd.setCallback(cmdCallBack);
