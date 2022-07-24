@@ -1,7 +1,7 @@
 const BASE_DIR = "./plugins/ItemTransfer/";
-const CONFIG_PATH = "Config.json";
-const DATA_PATH = "Data.json";
-const LANG_PATH = "Lang.json";
+const CONFIG_PATH = BASE_DIR + "Config.json";
+const DATA_PATH = BASE_DIR + "Data.json";
+const LANG_PATH = BASE_DIR + "Lang.json";
 
 const DEFAULT_CONFIG = {
     //是否开启背包与箱子间的物品转移
@@ -40,17 +40,18 @@ const DEFAULT_CMD = {
         description: "物品转移/Item transfer",
         permission: PermType.Any
     },
-    P2B: {
-        CMD: "P2B",
-        TYPE: ParamType.RawText
+    TRANSFER_ACTION: {
+        NAME: "transfer_action",
+        VALUES: ["p2b", "b2b"]
     },
-    B2B: {
-        CMD: "B2B",
-        TYPE: ParamType.RawText
+    BASE_ACTION: {
+        NAME: "base_action",
+        VALUES: ["giveup"]
     },
-    GIVE_UP: {
-        CMD: "giveUp",
-        TYPE: ParamType.RawText
+    ROOT_ACTION: {
+        NAME: "do",
+        TYPE: ParamType.Enum,
+        EnumOption: 1
     }
 }
 
@@ -66,11 +67,11 @@ let config = {};
  */
 class Utils {
     static stringfy(data) {
-        return data ? null : JSON.stringify(data);
+        return data ? JSON.stringify(data) : null;
     }
 
-    static debug(...data) {
-        mc.broadcast('§4debug:', data.toString());
+    static debug(data) {
+        mc.broadcast('§4debug:' + data.toString());
     }
 
     static isNUll(param) {
@@ -136,7 +137,8 @@ class Utils {
 
         function cmdCallBack(cmd, origin, output, results) {
             if (!Utils.hasNull(cmd, origin, output, results)) {
-
+                Utils.debug("res:" + JSON.stringify(results));
+                Utils.debug("cmd:" + JSON.stringify(cmd));
             }
         }
 
@@ -146,30 +148,39 @@ class Utils {
             DEFAULT_CMD.ROOT.description,
             DEFAULT_CMD.ROOT.permission);
 
-        //必选参数P2B
-        cmd.mandatory(
-            DEFAULT_CMD.P2B.CMD,
-            DEFAULT_CMD.P2B.TYPE
-        );
+        //枚举设置
+        cmd.setEnum(
+            DEFAULT_CMD.TRANSFER_ACTION.NAME,
+            DEFAULT_CMD.TRANSFER_ACTION.VALUES);
 
-        // 必选参数B2B
-        cmd.mandatory(
-            DEFAULT_CMD.B2B.CMD,
-            DEFAULT_CMD.B2B.TYPE
-        );
+        cmd.setEnum(
+            DEFAULT_CMD.BASE_ACTION.NAME,
+            DEFAULT_CMD.BASE_ACTION.VALUES);
 
-        //必选参数giveUp
+        //参数注册
         cmd.mandatory(
-            DEFAULT_CMD.GIVE_UP.CMD,
-            DEFAULT_CMD.GIVE_UP.TYPE
-        );
+            DEFAULT_CMD.ROOT_ACTION.NAME,
+            DEFAULT_CMD.ROOT_ACTION.TYPE,
+            DEFAULT_CMD.TRANSFER_ACTION.NAME,
+            DEFAULT_CMD.ROOT_ACTION.EnumOption);
+
+        cmd.mandatory(
+            DEFAULT_CMD.ROOT_ACTION.NAME,
+            DEFAULT_CMD.ROOT_ACTION.TYPE,
+            DEFAULT_CMD.BASE_ACTION.NAME,
+            DEFAULT_CMD.ROOT_ACTION.EnumOption);
 
         //参数重载
-        cmd.overload([]);
+        cmd.overload([DEFAULT_CMD.TRANSFER_ACTION.NAME]);
 
+        cmd.overload([DEFAULT_CMD.BASE_ACTION.NAME]);
+
+        //回调设置
+        cmd.setCallback(cmdCallBack);
 
         //安装
         cmd.setup();
+
     }
 }
 
@@ -187,8 +198,12 @@ class Form {
 
 
 function init() {
+    //初始化配置文件
     Utils.initFile();
+    //初始化运行时数据
     Utils.initData();
+    //注册指令
+    Utils.registerCommand();
 }
 
 
