@@ -12,9 +12,22 @@ const DEFAULT_CONFIG = {
 
 const DEFAULT_LANG = {
     FORM: {
-        MAIN_TITLE: "物品转移",
-        PACK_2_BOX: "背包转移",
-        BOX_2_BOX: "箱子转移",
+        MAIN_TITLE: "§l物品转移",
+        PACK_2_BOX: {
+            NAME:"§l背包转移",
+            IMG:"textures/blocks/beehive_front.png",
+            ORDER:0,
+        },
+        BOX_2_BOX: {
+            NAME:"§l箱子转移",
+            IMG:"textures/blocks/chest_front.png",
+            ORDER:1
+        },
+        GIVE_UP: {
+            NAME: "§l放弃转移",
+            IMG:"textures/ui/book_trash_default.png",
+            ORDER:2
+        }
     },
     INFO: {
         PACK_2_BOX: {
@@ -39,8 +52,8 @@ const DEFAULT_CMD = {
         CMD: "transfer",
         DESCRIPTION: "物品转移/Item transfer",
         PERMISSION: PermType.Any,
-        FLAG:0x80,
-        ALIAS:"tf"
+        FLAG: 0x80,
+        ALIAS: "tf"
 
     },
     TRANSFER_ACTION: {
@@ -51,8 +64,8 @@ const DEFAULT_CMD = {
         NAME: "base_action",
         VALUES: ["giveup"]
     },
-    GUI_ACTION : {
-        NAME:"gui_action",
+    GUI_ACTION: {
+        NAME: "gui_action",
         VALUES: ["gui"]
     },
     ROOT_ACTION: {
@@ -68,6 +81,7 @@ const DEFAULT_DATA = [];
 //运行时 玩家map
 let plMap = new Map();
 let config = {};
+let LANG = {};
 
 /**
  * 工具操作封装
@@ -135,8 +149,11 @@ class Utils {
     //初始化插件运行时数据
     static initData() {
         let configBuffer;
+        let langBuffer;
         if ((configBuffer = Utils.readFile(CONFIG_PATH)))
             config = configBuffer;
+        if ((langBuffer = Utils.readFile(LANG_PATH)))
+            LANG = langBuffer;
     }
 
     //注册指令
@@ -148,20 +165,30 @@ class Utils {
 
                 Utils.debug("res:" + JSON.stringify(results));
                 Utils.debug("cmd:" + JSON.stringify(cmd));
+                Utils.debug("ori:" + JSON.stringify(origin));
+                let pl = origin.player;
 
-                switch (results[DEFAULT_CMD.ROOT_ACTION.NAME]){
+                switch (results[DEFAULT_CMD.ROOT_ACTION.NAME]) {
                     //p2b
                     case DEFAULT_CMD.TRANSFER_ACTION.VALUES[0] : {
 
-                    }break;
+                    }
+                        break;
                     //b2b
                     case DEFAULT_CMD.TRANSFER_ACTION.VALUES[1] : {
 
-                    }break;
+                    }
+                        break;
                     //giveup
                     case DEFAULT_CMD.BASE_ACTION.VALUES[0] : {
 
-                    }break;
+                    }
+                        break;
+                    // gui
+                    case DEFAULT_CMD.GUI_ACTION.VALUES[0] : {
+                        if (!Utils.isNUll(pl))
+                            pl.sendForm(Form.mainForm(),Form.mainFormCallBack);
+                    }
                 }
             }
         }
@@ -226,11 +253,32 @@ class Utils {
  * 表单封装
  */
 class Form {
+    //主菜单
     static mainForm() {
         let fm = mc.newSimpleForm();
-        fm = fm.setTitle(DEFAULT_LANG.FORM.MAIN_TITLE);
-        fm = fm.addButton(DEFAULT_LANG.FORM.PACK_2_BOX);
-        return fm.addButton(DEFAULT_LANG.FORM.BOX_2_BOX);
+        fm.setTitle(LANG.FORM.MAIN_TITLE);
+        fm.addButton(LANG.FORM.PACK_2_BOX.NAME,LANG.FORM.PACK_2_BOX.IMG);
+        fm.addButton(LANG.FORM.BOX_2_BOX.NAME,LANG.FORM.BOX_2_BOX.IMG);
+        fm.addButton(LANG.FORM.GIVE_UP.NAME,LANG.FORM.GIVE_UP.IMG);
+        return fm;
+    }
+
+    //主菜单回调
+    static mainFormCallBack(pl, id) {
+        if (!Utils.hasNull(pl,id)){
+            Utils.debug(id);
+            switch (id){
+                case LANG.FORM.PACK_2_BOX.ORDER:{
+
+                }break;
+                case LANG.FORM.BOX_2_BOX.ORDER:{
+
+                }break;
+                case LANG.FORM.GIVE_UP.ORDER:{
+
+                }break;
+            }
+        }
     }
 }
 
