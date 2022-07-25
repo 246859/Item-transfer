@@ -72,6 +72,13 @@ const DEFAULT_LANG = {
             POS_ERROR: "§4位置参数解析错误",
             BLOCK_ERROR: "§4方块解析异常",
             BL_CT_ERROR: "§4容器解析异常",
+            ENDER_CHEST: {
+                KEY: "ender_chest",
+                VALUE: "§4不支持以末影箱为目标的物品转移!"
+            },
+            SHUILKER_BOX: {
+                KEY: "shulker_box",
+            }
 
         }
 
@@ -143,6 +150,16 @@ class Utils {
 
     static isNUll(param) {
         return param === null || param === undefined;
+    }
+
+    static getItemCount(ct) {
+        let count = 0;
+        for (let i = 0; i < ct.size; i++) {
+            if (!(ct.getItem(i).name === "")) {
+                count++;
+            }
+        }
+        return count;
     }
 
     static isSamePos(block1, block2) {
@@ -468,13 +485,12 @@ class Core {
             LANG.FORM.CONFIRM,
             LANG.FORM.CANCEL,
             (player, result) => {
-                //TODO 这里点击确认则进行物品转移
                 if (result) {
                     //创建转移处理器
                     let b2bProcessor = new Transfer(
                         Transfer.transformBlockToCt(pl, b2bMap.get(pl.name).boxA),
                         Transfer.transformBlockToCt(pl, b2bMap.get(pl.name).boxB));
-                    b2bProcessor.processor(pl);
+                    b2bProcessor.doB2bTransfer(pl);
                     Core.cleanPlayerStatus(pl);
                     Core.b2baCallBack(pl);
                 }
@@ -489,6 +505,8 @@ class Core {
 
         //潜行状态
         if (!pl.sneaking) return;
+
+        // Utils.debug(block.name);
 
         //win10多次触发解决
         Utils.resolveWin10Problem(pl);
@@ -535,38 +553,81 @@ class Transfer {
         return ct;
     }
 
-    processor(pl){
-        Utils.debug(this.containerA.size);
-        Utils.debug(this.containerB.size);
+    doP2bTransfer(pl, start) {
+        let target = p2bMap.get(pl.name);
+        this.processor(pl,start,target);
+    }
+
+    doB2bTransfer(pl) {
+        let target = b2bMap.get(pl.name).boxB;
+        this.processor(pl,0,target);
+    }
+
+    processor(pl, start, target) {
 
         let ct1 = this.containerA;
         let ct2 = this.containerB;
 
-        for (let i = 0; i < ct1.size; i++){
-            //获取当前方格的物品
-           let item = ct1.getItem(i);
-
-           //非空判断
-           if (item.isNull()) continue;
-
-           //获取nbt
-           let nbt = item.getNbt();
-
-           //根据nbt生成新物品
-           let newItem = mc.newItem(nbt);
-
-           //删除原物品
-           if (!item.setNull()) break;
-
-           //刷新玩家容器
-           if (!pl.refreshItems()) break;
-
-           //放入另一个容器中
-           if (!ct2.addItem(newItem)) break;
-
+        if (Utils.hasNull(pl, start, target)) {
+            Utils.tell(pl,LANG.ERROR.TRANSFER.BL_CT_ERROR);
+            return;
         }
-    }
 
+        // Utils.debug("ct1:" + Utils.getItemCount(ct1));
+        // Utils.debug("ct2:" + Utils.getItemCount(ct2));
+        // Utils.debug(target.type);
+
+        //末影箱子不支持
+        if (target.type.indexOf(LANG.ERROR.TRANSFER.ENDER_CHEST.KEY) > -1) {
+            Utils.tell(pl,LANG.ERROR.TRANSFER.ENDER_CHEST.VALUE);
+            return;
+        }
+
+        for (let i = start; i < ct1.size; i++) {
+            //获取当前方格的物品
+            let item = ct1.getItem(i);
+
+            //非空判断
+            if (item.isNull()) continue;
+
+            //物品和目标同为潜影盒时跳过
+            // Utils.debug(item.type)
+            // Utils.debug(item.type.indexOf(LANG.ERROR.TRANSFER.SHUILKER_BOX.KEY))
+            // Utils.debug(target.type)
+            // Utils.debug(target.type.indexOf(LANG.ERROR.TRANSFER.SHUILKER_BOX.KEY))
+
+            if (item.type.indexOf(LANG.ERROR.TRANSFER.SHUILKER_BOX.KEY) > -1
+                && target.type.indexOf(LANG.ERROR.TRANSFER.SHUILKER_BOX.KEY) > -1) continue;
+
+            //获取nbt
+            let nbt = item.getNbt();
+
+            //根据nbt生成新物品
+            let newItem = mc.newItem(nbt);
+
+            //放入另一个容器中
+            if (!ct2.addItem(newItem)) break;
+
+            //删除原物品
+            if (!item.setNull()) {
+                //原物品删除失败话则删除目标容器的物品
+                ct2.removeItem(i,64);
+                break;
+            }
+
+            //刷新玩家容器
+            if (!pl.refreshItems()) break;
+
+            if (i >= ct2.size - 1) break;
+        }
+
+        //最终刷新
+        pl.refreshItems();
+
+        // Utils.debug("----------------------------")
+        // Utils.debug("ct1:" + Utils.getItemCount(ct1));
+        // Utils.debug("ct2:" + Utils.getItemCount(ct2));
+    }
 }
 
 /**
@@ -588,7 +649,7 @@ class Form {
 
         if (Utils.hasNull(pl, id)) return;
 
-        Utils.debug(id);
+        // Utils.debug(id);
 
         switch (id) {
             case LANG.FORM.PACK_2_BOX.ORDER: {
@@ -628,10 +689,10 @@ class Form {
                     (player, result) => {
                         //TODO 点击确认则进行物品转移
                         if (result) {
-                            let p2bProcessor = new Transfer(
+                            new Transfer(
                                 pl.getInventory(),
-                                Transfer.transformBlockToCt(pl, p2bMap.get(pl.name)));
-                            p2bProcessor.processor(pl);
+                                Transfer.transformBlockToCt(pl, p2bMap.get(pl.name))
+                            ).doP2bTransfer(pl,0);
                         }
                     });
             }
@@ -646,10 +707,8 @@ class Form {
                     (player, result) => {
                         //TODO 点击确认则进行物品转移
                         if (result) {
-                            let b2pProcessor = new Transfer(
-                                Transfer.transformBlockToCt(pl, p2bMap.get(pl.name)),
-                                pl.getInventory());
-                            b2pProcessor.processor(pl);
+                            new Transfer(Transfer.transformBlockToCt(pl, p2bMap.get(pl.name)),
+                                pl.getInventory()).doP2bTransfer(pl,0);
                         }
                     });
             }
