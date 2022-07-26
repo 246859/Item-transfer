@@ -40,10 +40,15 @@ const DEFAULT_LANG = {
                 TIP: "§l是否将箱子A的物品转移到箱子B中",
             }
         },
+        KIT:{
+            NAME:"获取工具",
+            IMG:"textures/items/wood_sword.png",
+            ORDER:2
+        },
         GIVE_UP: {
             NAME: "§l放弃转移",
             IMG: "textures/ui/book_trash_default.png",
-            ORDER: 2
+            ORDER: 3
         },
         CONFIRM: "§l确认",
         CANCEL: "§l取消"
@@ -160,12 +165,15 @@ class Utils {
         return param === null || param === undefined;
     }
 
-
-
     static getTriggerItem(){
       let item = mc.newItem("wooden_sword",1);
       item.setLore([TRIGGER_FLAG]);
       return item;
+    }
+
+    static givePlayerKit(pl){
+        pl.giveItem(Utils.getTriggerItem());
+        pl.refreshItems();
     }
 
     static isTriggerItem(item){
@@ -491,8 +499,7 @@ class Core {
             }break;
             // kit
             case DEFAULT_CMD.KIT_ACTION.VALUES[0] : {
-                pl.giveItem(Utils.getTriggerItem());
-                pl.refreshItems();
+                Utils.givePlayerKit(pl);
             }
         }
     }
@@ -678,6 +685,7 @@ class Form {
         fm.setTitle(LANG.FORM.MAIN_TITLE);
         fm.addButton(LANG.FORM.PACK_2_BOX.NAME, LANG.FORM.PACK_2_BOX.IMG);
         fm.addButton(LANG.FORM.BOX_2_BOX.NAME, LANG.FORM.BOX_2_BOX.IMG);
+        fm.addButton(LANG.FORM.KIT.NAME, LANG.FORM.KIT.IMG);
         fm.addButton(LANG.FORM.GIVE_UP.NAME, LANG.FORM.GIVE_UP.IMG);
         return fm;
     }
@@ -702,6 +710,9 @@ class Form {
                 Core.giveUpCallBack(pl);
             }
                 break;
+            case LANG.FORM.KIT.ORDER : {
+                Utils.givePlayerKit(pl);
+            }
         }
     }
 
