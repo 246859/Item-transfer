@@ -8,6 +8,8 @@ const DEFAULT_CONFIG = {
     pack2boxTransfer: true,
     //是否开启箱子与箱子间的物品转移
     box2boxTransfer: true,
+    //背包到箱子转移时忽略主物品栏
+    p2bStartIndex:9
 };
 
 const DEFAULT_LANG = {
@@ -49,13 +51,13 @@ const DEFAULT_LANG = {
     INFO: {
         PACK_2_BOX: {
             NAME: "背包<-->箱子",
-            START: "潜行点击一个§4要转移的箱子§f,或/tf giveup退出",
+            START: "手持木剑潜行点击一个§4要转移的箱子§f,或/tf giveup退出",
         },
         BOX_2_BOX: {
             NAMEA: "§4箱子A§f-->箱子B",
             NAMEB: "箱子A-->§a箱子B",
-            BOXA: "潜行点击§4待转移的箱子A§f,或/tf giveup退出",
-            BOXB: "潜行点击§a要转移的箱子B§f,或/tf giveup退出",
+            BOXA: "手持木剑潜行点击§4待转移的箱子A§f,或/tf giveup退出",
+            BOXB: "手持木剑潜行点击§a要转移的箱子B§f,或/tf giveup退出",
         }
     },
     ERROR: {
@@ -78,10 +80,10 @@ const DEFAULT_LANG = {
             },
             SHUILKER_BOX: {
                 KEY: "shulker_box",
-            }
-
+            },
+            NON_CT: "§4非容器方块!",
+            UNABLE:"功能未开启",
         }
-
     }
 }
 
@@ -105,6 +107,10 @@ const DEFAULT_CMD = {
         NAME: "gui_action",
         VALUES: ["gui"]
     },
+    KIT_ACTION:{
+        NAME:"kit_action",
+        VALUES:["kit"]
+    },
     ROOT_ACTION: {
         NAME: "do",
         TYPE: ParamType.Enum,
@@ -121,6 +127,8 @@ const TAG = {
     B2BB: "B2BB",
 }
 const FACTOR = "FACTOR";
+const TRIGGER = "wooden_sword";
+const TRIGGER_FLAG = "ITEM_TRANSFER_TOOL";
 
 //运行时 玩家map
 let plMap = new Map();
@@ -152,15 +160,25 @@ class Utils {
         return param === null || param === undefined;
     }
 
-    static getItemCount(ct) {
-        let count = 0;
-        for (let i = 0; i < ct.size; i++) {
-            if (!(ct.getItem(i).name === "")) {
-                count++;
-            }
-        }
-        return count;
+
+
+    static getTriggerItem(){
+      let item = mc.newItem("wooden_sword",1);
+      item.setLore([TRIGGER_FLAG]);
+      return item;
     }
+
+    static isTriggerItem(item){
+        let nbt = item.getNbt();
+        let tagNbt = nbt.getData("tag");
+        if (!tagNbt) return;
+        let displayNbt = tagNbt.getData("display");
+        if (!displayNbt)return;
+        let loreNbt = displayNbt.getData("Lore");
+        if (!loreNbt) return;
+        return loreNbt.getTag(0).toString() === TRIGGER_FLAG;
+    }
+
 
     static isSamePos(block1, block2) {
 
@@ -293,6 +311,9 @@ class Utils {
         cmd.setEnum(
             DEFAULT_CMD.GUI_ACTION.NAME,
             DEFAULT_CMD.GUI_ACTION.VALUES);
+        cmd.setEnum(
+            DEFAULT_CMD.KIT_ACTION.NAME,
+            DEFAULT_CMD.KIT_ACTION.VALUES);
 
         //参数注册
         cmd.mandatory(
@@ -310,11 +331,17 @@ class Utils {
             DEFAULT_CMD.ROOT_ACTION.TYPE,
             DEFAULT_CMD.GUI_ACTION.NAME,
             DEFAULT_CMD.ROOT_ACTION.EnumOption);
+        cmd.mandatory(
+            DEFAULT_CMD.ROOT_ACTION.NAME,
+            DEFAULT_CMD.ROOT_ACTION.TYPE,
+            DEFAULT_CMD.KIT_ACTION.NAME,
+            DEFAULT_CMD.ROOT_ACTION.EnumOption);
 
         //参数重载
         cmd.overload([DEFAULT_CMD.TRANSFER_ACTION.NAME]);
         cmd.overload([DEFAULT_CMD.BASE_ACTION.NAME]);
         cmd.overload([DEFAULT_CMD.GUI_ACTION.NAME]);
+        cmd.overload([DEFAULT_CMD.KIT_ACTION.NAME]);
 
         //回调设置
         cmd.setCallback(Core.cmdCallBack);
@@ -382,6 +409,11 @@ class Core {
 
         if (Utils.isNUll(pl)) return;
 
+        if (!config.pack2boxTransfer) {
+            Utils.tell(pl,LANG.ERROR.TRANSFER.UNABLE);
+            return;
+        }
+
         //状态是否清空
         if (!Utils.isCleanStatus(pl)) {
             Utils.tell(pl, LANG.ERROR.TRANSFER.REPEAT);
@@ -401,6 +433,11 @@ class Core {
     static b2baCallBack(pl) {
 
         if (Utils.isNUll(pl)) return;
+
+        if (!config.box2boxTransfer){
+            Utils.tell(pl,LANG.ERROR.TRANSFER.UNABLE);
+            return;
+        }
 
         //状态是否清空
         if (!Utils.isCleanStatus(pl)) {
@@ -451,6 +488,11 @@ class Core {
             // gui
             case DEFAULT_CMD.GUI_ACTION.VALUES[0] : {
                 pl.sendForm(Form.mainForm(), Form.mainFormCallBack);
+            }break;
+            // kit
+            case DEFAULT_CMD.KIT_ACTION.VALUES[0] : {
+                pl.giveItem(Utils.getTriggerItem());
+                pl.refreshItems();
             }
         }
     }
@@ -488,6 +530,7 @@ class Core {
                 if (result) {
                     //创建转移处理器
                     let b2bProcessor = new Transfer(
+                        player,
                         Transfer.transformBlockToCt(pl, b2bMap.get(pl.name).boxA),
                         Transfer.transformBlockToCt(pl, b2bMap.get(pl.name).boxB));
                     b2bProcessor.doB2bTransfer(pl);
@@ -503,13 +546,20 @@ class Core {
         //参数校验
         if (Utils.hasNull(pl, item, block, side, pos) || pl.hasTag(FACTOR)) return;
 
+        //win10多次触发解决
+        Utils.resolveWin10Problem(pl);
+
         //潜行状态
         if (!pl.sneaking) return;
 
-        // Utils.debug(block.name);
+        //木剑且含有对于的lore
+        if (item.type.indexOf(TRIGGER) < 0 || !Utils.isTriggerItem(item)) return;
 
-        //win10多次触发解决
-        Utils.resolveWin10Problem(pl);
+        //非容器方块
+        if (!block.hasContainer()) {
+            Utils.tell(pl, LANG.ERROR.TRANSFER.NON_CT);
+            return;
+        }
 
         if (Utils.isOnlyStatusTag(pl, TAG.P2B)) {
             Core.p2bTriggerProcess(pl, block);
@@ -524,10 +574,10 @@ class Core {
 
 class Transfer {
 
-    constructor(ct1, ct2) {
+    constructor(pl, ct1, ct2) {
 
         if (Utils.hasNull(ct1, ct2)) {
-            Utils.tell(LANG.ERROR.TRANSFER.CT_ERROR);
+            Utils.tell(pl, LANG.ERROR.TRANSFER.CT_ERROR);
             return;
         }
 
@@ -540,14 +590,14 @@ class Transfer {
     static transformBlockToCt(pl, block) {
 
         if (Utils.hasNull(pl, block)) {
-            Utils.tell(LANG.ERROR.TRANSFER.BLOCK_ERROR);
+            Utils.tell(pl, LANG.ERROR.TRANSFER.BLOCK_ERROR);
             return;
         }
 
         let ct = block.getContainer();
 
         if (Utils.hasNull(ct)) {
-            Utils.tell(LANG.ERROR.TRANSFER.BL_CT_ERROR);
+            Utils.tell(pl, LANG.ERROR.TRANSFER.BL_CT_ERROR);
         }
 
         return ct;
@@ -555,12 +605,12 @@ class Transfer {
 
     doP2bTransfer(pl, start) {
         let target = p2bMap.get(pl.name);
-        this.processor(pl,start,target);
+        this.processor(pl, start, target);
     }
 
     doB2bTransfer(pl) {
         let target = b2bMap.get(pl.name).boxB;
-        this.processor(pl,0,target);
+        this.processor(pl, 0, target);
     }
 
     processor(pl, start, target) {
@@ -569,17 +619,13 @@ class Transfer {
         let ct2 = this.containerB;
 
         if (Utils.hasNull(pl, start, target)) {
-            Utils.tell(pl,LANG.ERROR.TRANSFER.BL_CT_ERROR);
+            Utils.tell(pl, LANG.ERROR.TRANSFER.BL_CT_ERROR);
             return;
         }
 
-        // Utils.debug("ct1:" + Utils.getItemCount(ct1));
-        // Utils.debug("ct2:" + Utils.getItemCount(ct2));
-        // Utils.debug(target.type);
-
         //末影箱子不支持
         if (target.type.indexOf(LANG.ERROR.TRANSFER.ENDER_CHEST.KEY) > -1) {
-            Utils.tell(pl,LANG.ERROR.TRANSFER.ENDER_CHEST.VALUE);
+            Utils.tell(pl, LANG.ERROR.TRANSFER.ENDER_CHEST.VALUE);
             return;
         }
 
@@ -590,12 +636,10 @@ class Transfer {
             //非空判断
             if (item.isNull()) continue;
 
-            //物品和目标同为潜影盒时跳过
-            // Utils.debug(item.type)
-            // Utils.debug(item.type.indexOf(LANG.ERROR.TRANSFER.SHUILKER_BOX.KEY))
-            // Utils.debug(target.type)
-            // Utils.debug(target.type.indexOf(LANG.ERROR.TRANSFER.SHUILKER_BOX.KEY))
+            //小木剑跳过
+            if (Utils.isTriggerItem(item)) continue;
 
+            //物品和目标同为潜影盒时跳过
             if (item.type.indexOf(LANG.ERROR.TRANSFER.SHUILKER_BOX.KEY) > -1
                 && target.type.indexOf(LANG.ERROR.TRANSFER.SHUILKER_BOX.KEY) > -1) continue;
 
@@ -611,22 +655,16 @@ class Transfer {
             //删除原物品
             if (!item.setNull()) {
                 //原物品删除失败话则删除目标容器的物品
-                ct2.removeItem(i,64);
+                ct2.removeItem(i, 64);
                 break;
             }
 
             //刷新玩家容器
             if (!pl.refreshItems()) break;
-
-            if (i >= ct2.size - 1) break;
         }
 
         //最终刷新
         pl.refreshItems();
-
-        // Utils.debug("----------------------------")
-        // Utils.debug("ct1:" + Utils.getItemCount(ct1));
-        // Utils.debug("ct2:" + Utils.getItemCount(ct2));
     }
 }
 
@@ -690,9 +728,10 @@ class Form {
                         //TODO 点击确认则进行物品转移
                         if (result) {
                             new Transfer(
+                                pl,
                                 pl.getInventory(),
                                 Transfer.transformBlockToCt(pl, p2bMap.get(pl.name))
-                            ).doP2bTransfer(pl,0);
+                            ).doP2bTransfer(pl, config.p2bStartIndex);
                         }
                     });
             }
@@ -707,14 +746,13 @@ class Form {
                     (player, result) => {
                         //TODO 点击确认则进行物品转移
                         if (result) {
-                            new Transfer(Transfer.transformBlockToCt(pl, p2bMap.get(pl.name)),
-                                pl.getInventory()).doP2bTransfer(pl,0);
+                            new Transfer(pl, Transfer.transformBlockToCt(pl, p2bMap.get(pl.name)),
+                                pl.getInventory()).doP2bTransfer(pl, 0);
                         }
                     });
             }
         }
     }
-
 }
 
 
